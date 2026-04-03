@@ -155,7 +155,11 @@ async def loja_slash(interaction: discord.Interaction):
 @tree.command(name="buscar", description="Buscar roupa pelo nome")
 async def buscar_slash(interaction: discord.Interaction, nome: str):
     if interaction.channel.id != CANAL_PERMITIDO:
-        return
+    await interaction.response.send_message(
+        "❌ Use este comando no canal correto.",
+        ephemeral=True
+    )
+    return
 
     roupas = carregar(ARQUIVO)
 
