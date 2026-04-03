@@ -1,22 +1,22 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import json
 import os
 
 # ================= CONFIG =================
 
-TOKEN = "SEU_TOKEN_AQUI"
+TOKEN = os.getenv("TOKEN")
 CANAL_PERMITIDO = 123456789012345678
 
 ARQUIVO = "roupas.json"
 HISTORICO = "historico.json"
 
-# ================= INTENTS =================
-
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
 
 # ================= ARQUIVOS =================
 
@@ -38,15 +38,15 @@ def salvar(arq, data):
 
 # ================= MODAIS =================
 
-class NomeModal(discord.ui.Modal, title="Registrar Roupa"):
+class NomeModal(discord.ui.Modal, title="📋 Registrar Roupa"):
     nome = discord.ui.TextInput(label="Nome da roupa")
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.send_modal(CodigoModal(self.nome.value))
 
 
-class CodigoModal(discord.ui.Modal, title="Código da Roupa"):
-    codigo = discord.ui.TextInput(label="Código", style=discord.TextStyle.paragraph)
+class CodigoModal(discord.ui.Modal, title="👕 Código da Roupa"):
+    codigo = discord.ui.TextInput(label="Cole o código", style=discord.TextStyle.paragraph)
 
     def __init__(self, nome):
         super().__init__()
@@ -62,18 +62,22 @@ class CodigoModal(discord.ui.Modal, title="Código da Roupa"):
         salvar(ARQUIVO, roupas)
         salvar(HISTORICO, historico)
 
-        msg = await interaction.response.send_message(
-            f"✅ **{self.nome}** registrada!",
+        embed = discord.Embed(
+            title="✅ Roupa Registrada",
+            description=f"**{self.nome}** foi salva com sucesso!",
+            color=discord.Color.green()
         )
 
-        sent = await interaction.original_response()
-        await sent.delete(delay=60)
+        await interaction.response.send_message(embed=embed)
+
+        msg = await interaction.original_response()
+        await msg.delete(delay=60)
 
 
 # ================= PAINEL =================
 
 class PainelView(discord.ui.View):
-    @discord.ui.button(label="Registrar Roupa", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="Registrar Roupa", style=discord.ButtonStyle.success, emoji="📋")
     async def registrar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.message.delete()
         await interaction.response.send_modal(NomeModal())
@@ -87,13 +91,13 @@ class LojaView(discord.ui.View):
         self.roupas = list(roupas.items())
         self.index = 0
 
-    def gerar_embed(self):
+    def embed(self):
         nome, codigo = self.roupas[self.index]
 
         embed = discord.Embed(
-            title=f"🛍️ Loja de Roupas GTA",
-            description=f"**{nome}**\n```{codigo}```",
-            color=discord.Color.blue()
+            title="🛍️ Loja de Roupas GTA",
+            description=f"👕 **{nome}**\n```{codigo}```",
+            color=discord.Color.blurple()
         )
 
         embed.set_footer(text=f"{self.index+1}/{len(self.roupas)}")
@@ -102,78 +106,84 @@ class LojaView(discord.ui.View):
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def anterior(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.index = (self.index - 1) % len(self.roupas)
-        await interaction.response.edit_message(embed=self.gerar_embed(), view=self)
+        await interaction.response.edit_message(embed=self.embed(), view=self)
 
     @discord.ui.button(label="📋 Copiar", style=discord.ButtonStyle.primary)
     async def copiar(self, interaction: discord.Interaction, button: discord.ui.Button):
         nome, codigo = self.roupas[self.index]
-
         msg = await interaction.channel.send(f"```{codigo}```")
         await msg.delete(delay=60)
-
         await interaction.response.defer()
 
     @discord.ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def proximo(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.index = (self.index + 1) % len(self.roupas)
-        await interaction.response.edit_message(embed=self.gerar_embed(), view=self)
+        await interaction.response.edit_message(embed=self.embed(), view=self)
 
 
-# ================= COMANDOS =================
+# ================= SLASH COMMANDS =================
 
-@bot.command()
-async def painel(ctx):
-    if ctx.channel.id != CANAL_PERMITIDO:
+@tree.command(name="painel", description="Abrir painel de registro")
+async def painel_slash(interaction: discord.Interaction):
+    if interaction.channel.id != CANAL_PERMITIDO:
         return
 
     embed = discord.Embed(
         title="📋 Painel de Registro",
-        description="Clique para registrar uma roupa",
+        description="Clique abaixo para registrar uma roupa",
         color=discord.Color.green()
     )
 
-    await ctx.send(embed=embed, view=PainelView())
+    await interaction.response.send_message(embed=embed, view=PainelView())
 
 
-@bot.command()
-async def loja(ctx):
-    if ctx.channel.id != CANAL_PERMITIDO:
+@tree.command(name="loja", description="Abrir loja de roupas")
+async def loja_slash(interaction: discord.Interaction):
+    if interaction.channel.id != CANAL_PERMITIDO:
         return
 
     roupas = carregar(ARQUIVO)
 
     if not roupas:
-        await ctx.send("❌ Nenhuma roupa cadastrada.")
+        await interaction.response.send_message("❌ Nenhuma roupa cadastrada.", ephemeral=True)
         return
 
     view = LojaView(roupas)
-    await ctx.send(embed=view.gerar_embed(), view=view)
+    await interaction.response.send_message(embed=view.embed(), view=view)
 
 
-# ================= BUSCA =================
+@tree.command(name="buscar", description="Buscar roupa pelo nome")
+async def buscar_slash(interaction: discord.Interaction, nome: str):
+    if interaction.channel.id != CANAL_PERMITIDO:
+        return
+
+    roupas = carregar(ARQUIVO)
+
+    nome = nome.lower()
+
+    if nome in roupas:
+        codigo = roupas[nome]
+
+        embed = discord.Embed(
+            title="🔎 Roupa encontrada",
+            description=f"👕 **{nome}**\n```{codigo}```",
+            color=discord.Color.blue()
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+        msg = await interaction.original_response()
+        await msg.delete(delay=60)
+    else:
+        await interaction.response.send_message("❌ Não encontrada.", ephemeral=True)
+
+
+# ================= READY =================
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    if message.channel.id != CANAL_PERMITIDO:
-        return
-
-    if message.content.startswith("#"):
-        nome = message.content[1:].lower()
-        roupas = carregar(ARQUIVO)
-
-        if nome in roupas:
-            codigo = roupas[nome]
-
-            msg = await message.channel.send(f"```{codigo}```")
-            await msg.delete(delay=60)
-        else:
-            msg = await message.channel.send("❌ Não encontrada.")
-            await msg.delete(delay=10)
-
-    await bot.process_commands(message)
+async def on_ready():
+    await tree.sync()
+    print(f"Bot online como {bot.user}")
 
 
 # ================= START =================
