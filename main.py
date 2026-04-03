@@ -7,7 +7,7 @@ import os
 # ================= CONFIG =================
 
 TOKEN = os.getenv("TOKEN")
-CANAL_PERMITIDO = 123456789012345678
+CANAL_PERMITIDO = 1489609986219704390
 
 ARQUIVO = "roupas.json"
 HISTORICO = "historico.json"
