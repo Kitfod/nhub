@@ -188,5 +188,4 @@ async def on_ready():
 
 # ================= START =================
 
-import os
-TOKEN = os.getenv("TOKEN")
+bot.run(TOKEN)
