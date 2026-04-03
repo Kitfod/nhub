@@ -180,9 +180,12 @@ async def buscar_slash(interaction: discord.Interaction, nome: str):
 
 # ================= READY =================
 
+GUILD_ID = 1489609598557229156  # ID DO SEU SERVIDOR
+
 @bot.event
 async def on_ready():
-    await tree.sync()
+    guild = discord.Object(id=GUILD_ID)
+    await tree.sync(guild=guild)
     print(f"Bot online como {bot.user}")
 
 
